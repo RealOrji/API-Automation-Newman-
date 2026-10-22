@@ -20,7 +20,7 @@ jobs:
     name: Lint collections
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
@@ -40,7 +40,7 @@ jobs:
           - { name: data-driven, script: test:data }
           - { name: ai-generated, script: test:generated }
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
@@ -74,7 +74,7 @@ jobs:
     # The same collection, run the way you would against a deployed environment:
     # start the service, wait until it is healthy, then call the plain `newman` CLI.
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
