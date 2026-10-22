@@ -1,0 +1,1171 @@
+{
+  "info": {
+    "name": "Bookstore API",
+    "description": "Hand-written regression suite for the sample Bookstore API.\n\nRun order matters: folders build on each other (login sets `{{token}}`, create sets `{{bookId}}`).\n\nRun it with `npm test`, or import it into Postman together with `environments/local.postman_environment.json`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Runs after EVERY request in the collection.",
+          "const maxMs = Number(pm.environment.get('maxResponseTimeMs') || 1000);",
+          "pm.test(`[global] Response time is below ${maxMs}ms`, () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(maxMs);",
+          "});",
+          "if (pm.response.code !== 204) {",
+          "    pm.test('[global] Content-Type is application/json', () => {",
+          "        pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "bookId",
+      "value": ""
+    },
+    {
+      "key": "newIsbn",
+      "value": ""
+    },
+    {
+      "key": "schema.book",
+      "value": "{\"type\":\"object\",\"required\":[\"id\",\"title\",\"author\",\"isbn\",\"price\",\"inStock\"],\"properties\":{\"id\":{\"type\":\"integer\"},\"title\":{\"type\":\"string\",\"minLength\":1},\"author\":{\"type\":\"string\",\"minLength\":1},\"isbn\":{\"type\":\"string\",\"pattern\":\"^\\\\d{13}$\"},\"price\":{\"type\":\"number\",\"minimum\":0},\"inStock\":{\"type\":\"boolean\"}},\"additionalProperties\":false}"
+    },
+    {
+      "key": "schema.error",
+      "value": "{\"type\":\"object\",\"required\":[\"error\",\"details\"],\"properties\":{\"error\":{\"type\":\"string\"},\"details\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}}"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup",
+      "description": "Put the API back into its seed state so results are repeatable.",
+      "item": [
+        {
+          "name": "Reset test data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "test",
+                "reset"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "description": "Smoke checks. If these fail, nothing else will pass.",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Service reports ok', () => pm.expect(pm.response.json().status).to.eql('ok'));",
+                  "pm.test('Body matches the health schema', () => {",
+                  "    pm.response.to.have.jsonSchema({",
+                  "        type: 'object',",
+                  "        required: ['status', 'uptime'],",
+                  "        properties: { status: { enum: ['ok'] }, uptime: { type: 'number' } },",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Token issuing, including the failure paths.",
+      "item": [
+        {
+          "name": "Login with valid credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Returns a Bearer token', () => {",
+                  "    pm.expect(body.token).to.be.a('string').and.not.be.empty;",
+                  "    pm.expect(body.tokenType).to.eql('Bearer');",
+                  "    pm.expect(body.expiresIn).to.be.a('number').above(0);",
+                  "});",
+                  "// Chain the token into later requests (collection-level auth uses {{token}}).",
+                  "pm.collectionVariables.set('token', body.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login with wrong password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"Invalid username or password\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('Invalid username or password');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login with empty body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Books - Read",
+      "description": "Read-only endpoints, query parameters and contract checks.",
+      "item": [
+        {
+          "name": "List all books",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('count matches the number of items', () => {",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    pm.expect(body.count).to.eql(body.data.length);",
+                  "});",
+                  "pm.test('Seed data is present', () => pm.expect(body.count).to.be.at.least(3));",
+                  "pm.test('Every book matches the Book schema', () => {",
+                  "    const schema = JSON.parse(pm.collectionVariables.get('schema.book'));",
+                  "    pm.response.to.have.jsonSchema({ type: 'object', properties: { data: { type: 'array', items: schema } } });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter books by author",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const books = pm.response.json().data;",
+                  "pm.test('Returns at least one match', () => pm.expect(books).to.not.be.empty);",
+                  "pm.test('Every result matches the filter (case-insensitive)', () => {",
+                  "    books.forEach((book) => pm.expect(book.author.toLowerCase()).to.include('fowler'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?author=fowler",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "author",
+                  "value": "fowler"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Limit the number of results",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('No more than 2 books are returned', () => pm.expect(pm.response.json().data).to.have.length.of.at.most(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?limit=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "2"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reject an invalid limit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"limit\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('limit');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?limit=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get a book by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns the requested book', () => pm.expect(pm.response.json().id).to.eql(1));",
+                  "pm.test('Body matches the Book schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.book')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get a book that does not exist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"99999\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('99999');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/99999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "99999"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Books - CRUD flow",
+      "description": "An end-to-end happy path. Each request uses values saved by the previous one.",
+      "item": [
+        {
+          "name": "Create a book",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh 13-digit ISBN per run so the create never collides with existing data.",
+                  "const isbn = '978' + String(Date.now()).slice(-10);",
+                  "pm.collectionVariables.set('newIsbn', isbn);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "const book = pm.response.json();",
+                  "pm.test('Body matches the Book schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.book')));",
+                  "});",
+                  "pm.test('Saved fields match what was sent', () => {",
+                  "    pm.expect(book).to.include({",
+                  "        title: 'API Testing with Newman',",
+                  "        author: 'Ada Tester',",
+                  "        isbn: pm.collectionVariables.get('newIsbn'),",
+                  "        price: 19.99,",
+                  "        inStock: true,",
+                  "    });",
+                  "});",
+                  "pm.test('Location header points to the new book', () => {",
+                  "    pm.expect(pm.response.headers.get('Location')).to.eql('/books/' + book.id);",
+                  "});",
+                  "pm.collectionVariables.set('bookId', book.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"API Testing with Newman\",\n  \"author\": \"Ada Tester\",\n  \"isbn\": \"{{newIsbn}}\",\n  \"price\": 19.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get the created book",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns the book that was created', () => {",
+                  "    const book = pm.response.json();",
+                  "    pm.expect(String(book.id)).to.eql(String(pm.collectionVariables.get('bookId')));",
+                  "    pm.expect(book.isbn).to.eql(pm.collectionVariables.get('newIsbn'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{bookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "{{bookId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update the price",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Only the sent fields changed', () => {",
+                  "    const book = pm.response.json();",
+                  "    pm.expect(book.price).to.eql(24.5);",
+                  "    pm.expect(book.inStock).to.eql(false);",
+                  "    pm.expect(book.title).to.eql('API Testing with Newman');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{bookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "{{bookId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 24.5,\n  \"inStock\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete the book",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', () => pm.response.to.have.status(204));",
+                  "pm.test('Body is empty', () => pm.expect(pm.response.text()).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{bookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "{{bookId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get the deleted book returns 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{bookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "{{bookId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Books - Negative",
+      "description": "Auth, validation and error handling. A good API fails loudly and clearly.",
+      "item": [
+        {
+          "name": "Create without a token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"Bearer token\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('Bearer token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"No Auth\",\n  \"author\": \"Nobody\",\n  \"isbn\": \"9780000000001\",\n  \"price\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create with an invalid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bad Auth\",\n  \"author\": \"Nobody\",\n  \"isbn\": \"9780000000002\",\n  \"price\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-real-token",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create with a missing title",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"title\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('title');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"author\": \"Someone\",\n  \"isbn\": \"9780000000003\",\n  \"price\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create with an invalid ISBN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"isbn\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('isbn');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bad ISBN\",\n  \"author\": \"Someone\",\n  \"isbn\": \"12345\",\n  \"price\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create with a negative price",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"price\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('price');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Free Money\",\n  \"author\": \"Someone\",\n  \"isbn\": \"9780000000004\",\n  \"price\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create with a duplicate ISBN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"9780132350884\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('9780132350884');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "description": "Uses the ISBN of a seed book, so the API must answer 409 Conflict.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Clean Code (copy)\",\n  \"author\": \"Robert C. Martin\",\n  \"isbn\": \"9780132350884\",\n  \"price\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create with malformed JSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"not valid JSON\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('not valid JSON');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"title\": \"Broken\", ",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update with a wrong field type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});",
+                  "pm.test('Error details mention \"price\"', () => {",
+                  "    const details = pm.response.json().details.join(' ');",
+                  "    pm.expect(details).to.include('price');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "1"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"twenty\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete a book that does not exist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Error body matches the Error schema', () => {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get('schema.error')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/99999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                "99999"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

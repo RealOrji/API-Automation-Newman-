@@ -1,0 +1,216 @@
+openapi: 3.0.3
+info:
+  title: Bookstore API
+  version: 1.0.0
+  description: |
+    Sample API used as the system under test in this repository.
+    Data is kept in memory. Write operations need a Bearer token from `POST /auth/token`
+    (demo credentials: `admin` / `password123`).
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, uptime]
+                properties:
+                  status: { type: string, enum: [ok] }
+                  uptime: { type: number }
+  /auth/token:
+    post:
+      summary: Exchange credentials for a Bearer token
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, example: password123 }
+      responses:
+        '201':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, tokenType, expiresIn]
+                properties:
+                  token: { type: string }
+                  tokenType: { type: string, enum: [Bearer] }
+                  expiresIn: { type: integer }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /books:
+    get:
+      summary: List books
+      operationId: listBooks
+      parameters:
+        - name: author
+          in: query
+          description: Case-insensitive partial match on author
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: Maximum number of books to return
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: A list of books
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Book' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      summary: Create a book
+      operationId: createBook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewBook' }
+      responses:
+        '201':
+          description: Book created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Book' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A book with the same ISBN exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /books/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get a book by id
+      operationId: getBook
+      responses:
+        '200':
+          description: The book
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Book' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update some fields of a book
+      operationId: updateBook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookPatch' }
+      responses:
+        '200':
+          description: The updated book
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Book' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a book
+      operationId: deleteBook
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    NewBook:
+      type: object
+      required: [title, author, isbn, price]
+      properties:
+        title: { type: string, minLength: 1 }
+        author: { type: string, minLength: 1 }
+        isbn: { type: string, pattern: '^\d{13}$', example: '9780596007126' }
+        price: { type: number, minimum: 0 }
+        inStock: { type: boolean, default: true }
+    BookPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1 }
+        author: { type: string, minLength: 1 }
+        isbn: { type: string, pattern: '^\d{13}$' }
+        price: { type: number, minimum: 0 }
+        inStock: { type: boolean }
+    Book:
+      allOf:
+        - $ref: '#/components/schemas/NewBook'
+        - type: object
+          required: [id, inStock]
+          properties:
+            id: { type: integer }
+    Error:
+      type: object
+      required: [error, details]
+      properties:
+        error: { type: string }
+        details:
+          type: array
+          items: { type: string }
+  responses:
+    BadRequest:
+      description: The request was invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

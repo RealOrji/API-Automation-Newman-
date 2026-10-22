@@ -1,0 +1,46 @@
+{
+  "name": "api-automation-newman",
+  "version": "1.0.0",
+  "description": "AI-driven API test automation with Postman collections, Newman and GitHub Actions. A learning project.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Orji Innocent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RealOrji/API-Automation-Newman-.git"
+  },
+  "keywords": [
+    "newman",
+    "postman",
+    "api-testing",
+    "test-automation",
+    "ci-cd",
+    "github-actions",
+    "claude",
+    "ai"
+  ],
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "start": "node api/server.js",
+    "test": "node scripts/run-tests.js",
+    "test:smoke": "node scripts/run-tests.js --collection collections/books-api.postman_collection.json --folder Health",
+    "test:data": "node scripts/run-tests.js --collection collections/books-data-driven.postman_collection.json --data data/book-validation.json",
+    "test:remote": "node scripts/run-tests.js --no-server",
+    "test:generated": "node scripts/run-tests.js --collection collections/generated/books-api.ai-generated.postman_collection.json",
+    "ai:generate": "node --env-file-if-exists=.env ai/generate-tests.js",
+    "ai:generate:example": "node --env-file-if-exists=.env ai/generate-tests.js --from-plan ai/examples/test-plan.example.json",
+    "ai:analyze": "node --env-file-if-exists=.env ai/analyze-failures.js",
+    "lint": "node scripts/validate-collections.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "express": "^5.3.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "newman": "^6.2.3",
+    "newman-reporter-htmlextra": "^1.23.1"
+  }
+}

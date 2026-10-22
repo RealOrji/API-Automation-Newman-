@@ -1,0 +1,11 @@
+[
+  { "case": "valid book", "book": { "title": "Data Driven Testing", "author": "Iteration Smith", "isbn": "RANDOM", "price": 15 }, "expectedStatus": 201, "expectedDetail": "" },
+  { "case": "missing title", "book": { "author": "A. Author", "isbn": "9781111111111", "price": 10 }, "expectedStatus": 400, "expectedDetail": "title" },
+  { "case": "blank author", "book": { "title": "No Author", "author": "   ", "isbn": "9781111111112", "price": 10 }, "expectedStatus": 400, "expectedDetail": "author" },
+  { "case": "isbn too short", "book": { "title": "Short ISBN", "author": "A. Author", "isbn": "978111", "price": 10 }, "expectedStatus": 400, "expectedDetail": "isbn" },
+  { "case": "isbn with letters", "book": { "title": "Letters", "author": "A. Author", "isbn": "97811111111AB", "price": 10 }, "expectedStatus": 400, "expectedDetail": "isbn" },
+  { "case": "price as string", "book": { "title": "String Price", "author": "A. Author", "isbn": "9781111111113", "price": "10" }, "expectedStatus": 400, "expectedDetail": "price" },
+  { "case": "negative price", "book": { "title": "Negative", "author": "A. Author", "isbn": "9781111111114", "price": -1 }, "expectedStatus": 400, "expectedDetail": "price" },
+  { "case": "inStock not boolean", "book": { "title": "Stock", "author": "A. Author", "isbn": "9781111111115", "price": 10, "inStock": "yes" }, "expectedStatus": 400, "expectedDetail": "inStock" },
+  { "case": "duplicate isbn", "book": { "title": "Refactoring (copy)", "author": "Martin Fowler", "isbn": "9780134757599", "price": 38 }, "expectedStatus": 409, "expectedDetail": "already exists" }
+]

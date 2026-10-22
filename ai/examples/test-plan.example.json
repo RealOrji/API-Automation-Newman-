@@ -1,0 +1,160 @@
+{
+  "summary": "Hand-written EXAMPLE plan in the same format Claude returns, so you can try the generator without an API key. It covers the happy path of each operation, auth, boundary validation and error shape.",
+  "testCases": [
+    {
+      "name": "Health endpoint reports ok",
+      "folder": "Health",
+      "rationale": "If the service is not healthy, every other result is noise.",
+      "method": "GET", "path": "/health", "query": "", "auth": "none", "body": "", "expectedStatus": 200,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "status", "expected": "\"ok\"" },
+        { "kind": "jsonPathType", "target": "uptime", "expected": "number" }
+      ]
+    },
+    {
+      "name": "Login returns a Bearer token",
+      "folder": "Auth",
+      "rationale": "Every write depends on token issuing.",
+      "method": "POST", "path": "/auth/token", "query": "", "auth": "none",
+      "body": "{\"username\":\"admin\",\"password\":\"password123\"}", "expectedStatus": 201,
+      "assertions": [
+        { "kind": "jsonPathType", "target": "token", "expected": "string" },
+        { "kind": "jsonPathEquals", "target": "tokenType", "expected": "\"Bearer\"" }
+      ]
+    },
+    {
+      "name": "Login rejects a wrong password",
+      "folder": "Auth",
+      "rationale": "Bad credentials must never produce a token.",
+      "method": "POST", "path": "/auth/token", "query": "", "auth": "none",
+      "body": "{\"username\":\"admin\",\"password\":\"nope\"}", "expectedStatus": 401,
+      "assertions": [
+        { "kind": "jsonPathType", "target": "details", "expected": "array" },
+        { "kind": "jsonPathExists", "target": "error", "expected": "" }
+      ]
+    },
+    {
+      "name": "List books returns the seed data",
+      "folder": "Books - Read",
+      "rationale": "The list contract (count + data) is what clients page through.",
+      "method": "GET", "path": "/books", "query": "", "auth": "none", "body": "", "expectedStatus": 200,
+      "assertions": [
+        { "kind": "arrayMinLength", "target": "data", "expected": "3" },
+        { "kind": "jsonPathType", "target": "count", "expected": "number" },
+        { "kind": "jsonPathExists", "target": "data.0.isbn", "expected": "" }
+      ]
+    },
+    {
+      "name": "Limit of 1 returns one book",
+      "folder": "Books - Read",
+      "rationale": "Lower boundary of the limit parameter.",
+      "method": "GET", "path": "/books", "query": "limit=1", "auth": "none", "body": "", "expectedStatus": 200,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "count", "expected": "1" }
+      ]
+    },
+    {
+      "name": "Limit of 0 is rejected",
+      "folder": "Books - Read",
+      "rationale": "Just below the documented minimum of 1.",
+      "method": "GET", "path": "/books", "query": "limit=0", "auth": "none", "body": "", "expectedStatus": 400,
+      "assertions": [
+        { "kind": "bodyContains", "target": "", "expected": "limit" }
+      ]
+    },
+    {
+      "name": "Get the fixture book",
+      "folder": "Books - Read",
+      "rationale": "Reading by id is the most common call.",
+      "method": "GET", "path": "/books/{{bookId}}", "query": "", "auth": "none", "body": "", "expectedStatus": 200,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "title", "expected": "\"Fixture Book\"" },
+        { "kind": "jsonPathType", "target": "inStock", "expected": "boolean" }
+      ]
+    },
+    {
+      "name": "Unknown book returns 404",
+      "folder": "Books - Read",
+      "rationale": "Missing resources must not look like empty successes.",
+      "method": "GET", "path": "/books/424242", "query": "", "auth": "none", "body": "", "expectedStatus": 404,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "error", "expected": "\"Not Found\"" }
+      ]
+    },
+    {
+      "name": "Create a book with a zero price",
+      "folder": "Books - Write",
+      "rationale": "0 is the documented minimum price, so it must be accepted.",
+      "method": "POST", "path": "/books", "query": "", "auth": "token",
+      "body": "{\"title\":\"Free Book\",\"author\":\"Gen Erous\",\"isbn\":\"{{uniqueIsbn}}\",\"price\":0}", "expectedStatus": 201,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "price", "expected": "0" },
+        { "kind": "jsonPathEquals", "target": "inStock", "expected": "true" },
+        { "kind": "headerContains", "target": "Location", "expected": "/books/" }
+      ]
+    },
+    {
+      "name": "Patch the fixture title",
+      "folder": "Books - Write",
+      "rationale": "Partial updates must change only the fields sent.",
+      "method": "PATCH", "path": "/books/{{bookId}}", "query": "", "auth": "token",
+      "body": "{\"title\":\"Fixture Book v2\"}", "expectedStatus": 200,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "title", "expected": "\"Fixture Book v2\"" },
+        { "kind": "jsonPathEquals", "target": "author", "expected": "\"Generator\"" }
+      ]
+    },
+    {
+      "name": "Create without a token is rejected",
+      "folder": "Books - Negative",
+      "rationale": "Writes must require authentication.",
+      "method": "POST", "path": "/books", "query": "", "auth": "none",
+      "body": "{\"title\":\"X\",\"author\":\"Y\",\"isbn\":\"{{uniqueIsbn}}\",\"price\":1}", "expectedStatus": 401,
+      "assertions": [
+        { "kind": "jsonPathEquals", "target": "error", "expected": "\"Unauthorized\"" }
+      ]
+    },
+    {
+      "name": "Create with an invalid token is rejected",
+      "folder": "Books - Negative",
+      "rationale": "A made-up token must not pass as a real one.",
+      "method": "POST", "path": "/books", "query": "", "auth": "invalid",
+      "body": "{\"title\":\"X\",\"author\":\"Y\",\"isbn\":\"{{uniqueIsbn}}\",\"price\":1}", "expectedStatus": 401,
+      "assertions": []
+    },
+    {
+      "name": "ISBN with 12 digits is rejected",
+      "folder": "Books - Negative",
+      "rationale": "One digit short of the 13-digit pattern.",
+      "method": "POST", "path": "/books", "query": "", "auth": "token",
+      "body": "{\"title\":\"Short\",\"author\":\"Y\",\"isbn\":\"978013235088\",\"price\":1}", "expectedStatus": 400,
+      "assertions": [
+        { "kind": "bodyContains", "target": "", "expected": "isbn" }
+      ]
+    },
+    {
+      "name": "Price just below zero is rejected",
+      "folder": "Books - Negative",
+      "rationale": "Boundary just below the minimum price.",
+      "method": "POST", "path": "/books", "query": "", "auth": "token",
+      "body": "{\"title\":\"Neg\",\"author\":\"Y\",\"isbn\":\"{{uniqueIsbn}}\",\"price\":-0.01}", "expectedStatus": 400,
+      "assertions": [
+        { "kind": "bodyContains", "target": "", "expected": "price" }
+      ]
+    },
+    {
+      "name": "Delete the fixture book",
+      "folder": "Books - Write",
+      "rationale": "Deletes must succeed once and then the book is gone.",
+      "method": "DELETE", "path": "/books/{{bookId}}", "query": "", "auth": "token", "body": "", "expectedStatus": 204,
+      "assertions": []
+    },
+    {
+      "name": "Deleting it again returns 404",
+      "folder": "Books - Negative",
+      "rationale": "Delete is not silently idempotent here; the contract says 404.",
+      "method": "DELETE", "path": "/books/{{bookId}}", "query": "", "auth": "token", "body": "", "expectedStatus": 404,
+      "assertions": []
+    }
+  ]
+}

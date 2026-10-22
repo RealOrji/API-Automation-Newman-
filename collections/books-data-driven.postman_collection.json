@@ -1,0 +1,139 @@
+{
+  "info": {
+    "name": "Bookstore API - Data-driven validation",
+    "description": "Runs once per row in `data/book-validation.json`. Each row is one validation case with its expected status.\n\nRun it with `npm run test:data`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "requestBody",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Login with valid credentials",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Runs every iteration, so each validation case gets a fresh token.",
+              "pm.test('Login succeeded', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('token', pm.response.json().token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        }
+      }
+    },
+    {
+      "name": "Create book - {{case}}",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Build the body from the current data row. Typed JSON data lets us send",
+              "// wrong types on purpose (e.g. price as a string).",
+              "const row = pm.iterationData.toObject();",
+              "const body = { ...row.book };",
+              "if (body.isbn === 'RANDOM') body.isbn = '979' + String(Date.now()).slice(-10);",
+              "pm.variables.set('requestBody', JSON.stringify(body));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const expected = pm.iterationData.get('expectedStatus');",
+              "const name = pm.iterationData.get('case');",
+              "pm.test(`[${name}] status is ${expected}`, () => pm.response.to.have.status(expected));",
+              "const detail = pm.iterationData.get('expectedDetail');",
+              "if (detail) {",
+              "    pm.test(`[${name}] error details mention \"${detail}\"`, () => {",
+              "        pm.expect(pm.response.json().details.join(' ')).to.include(detail);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/books",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "books"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{{requestBody}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

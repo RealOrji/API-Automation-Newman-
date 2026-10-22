@@ -1,0 +1,104 @@
+name: API Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *' # every day at 06:00 UTC, catches drift even when nobody pushes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint collections
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  newman:
+    name: Newman - ${{ matrix.suite.name }}
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # let every suite finish so you see all failures at once
+      matrix:
+        suite:
+          - { name: regression, script: test }
+          - { name: data-driven, script: test:data }
+          - { name: ai-generated, script: test:generated }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # Boots the API in-process and runs the collection (see scripts/run-tests.js).
+      - name: Run Newman
+        run: npm run ${{ matrix.suite.script }}
+
+      # Always writes a results table to the job summary. On failure, and only if the
+      # ANTHROPIC_API_KEY secret exists, Claude adds a root-cause triage.
+      - name: Summarise results (AI triage on failure)
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run ai:analyze
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report-${{ matrix.suite.name }}
+          path: reports/
+          retention-days: 14
+
+  newman-cli:
+    name: Newman CLI against a running server
+    needs: lint
+    runs-on: ubuntu-latest
+    # The same collection, run the way you would against a deployed environment:
+    # start the service, wait until it is healthy, then call the plain `newman` CLI.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: Start the API
+        run: |
+          npm start &
+          curl --silent --fail --retry 20 --retry-delay 1 --retry-connrefused http://localhost:3000/health
+
+      - name: Run Newman CLI
+        run: |
+          npx newman run collections/books-api.postman_collection.json \
+            --environment environments/local.postman_environment.json \
+            --env-var "baseUrl=http://localhost:3000" \
+            --reporters cli,junit,htmlextra \
+            --reporter-junit-export reports/cli.junit.xml \
+            --reporter-htmlextra-export reports/cli.html
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report-cli
+          path: reports/
+          retention-days: 14
