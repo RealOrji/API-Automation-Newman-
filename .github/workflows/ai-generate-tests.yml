@@ -65,7 +65,7 @@ jobs:
       # under Settings > Actions > General.
       - name: Open a pull request
         if: inputs.open_pr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: ai/generated-tests
           commit-message: Update AI-generated API tests
